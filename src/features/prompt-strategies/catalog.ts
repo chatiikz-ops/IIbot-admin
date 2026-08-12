@@ -1,0 +1,7 @@
+import { STRATEGY_LABELS } from "@/src/lib/constants/labels";
+export const SYSTEM_CODES=Object.keys(STRATEGY_LABELS);
+export const GROUP_ORDER=["Салоны красоты","Барбершопы","Косметология","Клиники","Стоматологии","Ногтевые студии","SPA / массаж","Общие сценарии","Системные правила"];
+export function strategyName(code:string){return STRATEGY_LABELS[code]||"Системная стратегия"}
+export function strategyGroup(code:string){if(code.startsWith("BEAUTY_"))return "Салоны красоты";if(code.startsWith("BARBERSHOP_"))return "Барбершопы";if(code.startsWith("COSMETOLOGY_"))return "Косметология";if(code.startsWith("CLINIC_"))return "Клиники";if(code.startsWith("DENTAL_"))return "Стоматологии";if(code.startsWith("NAIL_"))return "Ногтевые студии";if(code.startsWith("SPA_"))return "SPA / массаж";if(code==="SKIP_EXISTING_CLIENT")return "Системные правила";return "Общие сценарии"}
+export function strategyDescription(code:string){if(code==="SKIP_EXISTING_CLIENT")return "Контакты, у которых обнаружена ссылка Zapis.kz, не участвуют в автоматической обработке.";const business=strategyName(code).split(" — ")[0];return code.endsWith("_COMPETITOR")?`Используется для категории «${business}», когда обнаружена сторонняя система онлайн-записи.`:`Используется для категории «${business}», когда CRM клиента не определена.`}
+export function strategyUsage(code:string){const name=strategyName(code).split(" — ")[0];return {business:name,system:code.endsWith("_COMPETITOR")?"Другая CRM":"CRM не определена"}}

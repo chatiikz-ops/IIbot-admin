@@ -1,0 +1,23 @@
+"use client";
+
+import Link from "next/link";
+import { useCallback, useEffect, useState } from "react";
+import { Eye, Plus, RefreshCw } from "lucide-react";
+import { api, unpackList } from "@/src/lib/api/client";
+import { dateTime } from "@/src/lib/formatters";
+import { CAMPAIGN_STATUS_LABELS, fieldValueLabel } from "@/src/lib/constants/labels";
+import { BackendOfflineState, Button, EmptyState, ErrorState, LoadingState, Pagination, SearchInput, SelectFilter, StatusBadge } from "@/src/components/ui/ui";
+import { Campaign, CampaignStatus } from "./types";
+import { CampaignWizard } from "./campaign-wizard";
+
+export function CampaignsPage() {
+  const [campaigns,setCampaigns]=useState<Campaign[]>([]); const [total,setTotal]=useState(0);
+  const [page,setPage]=useState(1); const [search,setSearch]=useState(""); const [status,setStatus]=useState("");
+  const [loading,setLoading]=useState(true); const [error,setError]=useState(""); const [wizard,setWizard]=useState(false); const [summary,setSummary]=useState({total:0,running:0,paused:0,completed:0});
+  const load=useCallback(async()=>{setLoading(true);setError("");try{const [payload,all,running,paused,completed]=await Promise.all([api.get("/campaigns",{query:{page,limit:20,search,status}}),api.get("/campaigns",{query:{page:1,limit:1}}),api.get("/campaigns",{query:{page:1,limit:1,status:"RUNNING"}}),api.get("/campaigns",{query:{page:1,limit:1,status:"PAUSED"}}),api.get("/campaigns",{query:{page:1,limit:1,status:"COMPLETED"}})]);const result=unpackList<Campaign>(payload);setCampaigns(result.items);setTotal(result.total);setSummary({total:unpackList(all).total,running:unpackList(running).total,paused:unpackList(paused).total,completed:unpackList(completed).total})}catch(caught){setError(caught instanceof Error?caught.message:"Не удалось загрузить кампании")}finally{setLoading(false)}},[page,search,status]);
+  useEffect(()=>{const id=setTimeout(load,search?350:0);return()=>clearTimeout(id)},[load,search]);
+  return <section className="page"><div className="page-intro"><div><h2>Кампании</h2><p>Управление базами для автоматической обработки клиентов</p></div><Button onClick={()=>setWizard(true)}><Plus size={16}/>Создать кампанию</Button></div><div className="campaign-summary"><Summary label="Всего кампаний" value={summary.total}/><Summary label="Работают" value={summary.running}/><Summary label="На паузе" value={summary.paused}/><Summary label="Завершены" value={summary.completed}/></div><div className="toolbar"><SearchInput placeholder="Поиск по названию…" value={search} onChange={e=>{setSearch(e.target.value);setPage(1)}}/><SelectFilter label="Статус" value={status} onChange={e=>{setStatus(e.target.value);setPage(1)}}><option value="">Все</option>{Object.entries(CAMPAIGN_STATUS_LABELS).map(([value,label])=><option key={value} value={value}>{label}</option>)}</SelectFilter><Button variant="secondary" onClick={load}><RefreshCw size={15}/>Обновить</Button></div>{loading&&!campaigns.length?<LoadingState/>:error?(error.includes("подключ")?<BackendOfflineState retry={load}/>:<ErrorState message={error} retry={load}/>):!campaigns.length?<EmptyState title="Кампаний пока нет" description="Создайте первую кампанию и выберите контакты для обработки."/>:<><div className="table-wrap"><table><thead><tr><th>Название</th><th>Статус</th><th>Контактов</th><th>Обработано</th><th>Ответили</th><th>Лиды</th><th>Создана</th><th>Действия</th></tr></thead><tbody>{campaigns.map(c=><tr key={c.id}><td><b>{c.name}</b></td><td><StatusBadge tone={tone(c.status)}>{fieldValueLabel("status",c.status,"campaign")}</StatusBadge></td><td>{metric(c,"totalTargets","targetCount","total")}</td><td>{metric(c,"processedTargets","processedCount","processed")}</td><td>{metric(c,"repliedTargets","repliedCount","replied")}</td><td>{metric(c,"leadTargets","leadCount","leads")}</td><td>{dateTime(c.createdAt)}</td><td><Link className="icon-button" href={`/campaigns/${c.id}`} aria-label="Открыть"><Eye size={16}/></Link></td></tr>)}</tbody></table></div><Pagination page={page} total={total} limit={20} onChange={setPage}/></>}<CampaignWizard open={wizard} onClose={()=>setWizard(false)}/></section>;
+}
+function Summary({label,value}:{label:string;value:number}){return <article><span>{label}</span><strong>{value}</strong></article>}
+export function metric(campaign:Campaign,...keys:string[]){if(keys.includes("totalTargets")&&typeof campaign.selectedCount==="number")return campaign.selectedCount;for(const key of keys){const value=campaign[key];if(typeof value==="number")return value}return "—"}
+export function tone(status:CampaignStatus){return status==="RUNNING"?"success":status==="PAUSED"?"warning":status==="CANCELLED"?"danger":status==="COMPLETED"?"info":"neutral"}
