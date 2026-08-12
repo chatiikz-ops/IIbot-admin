@@ -1,2 +1,2 @@
-import { ResourcePage } from "@/src/features/resource-page";
-export default function Page(){return <ResourcePage type="contacts"/>}
+import { ContactsPage } from "@/src/features/contacts/contacts-page";
+export default function Page(){return <ContactsPage/>}

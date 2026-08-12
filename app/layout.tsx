@@ -6,6 +6,7 @@ import "./campaigns.css";
 import "./whatsapp.css";
 import "./strategies.css";
 import "./settings.css";
+import { AuthProvider } from "@/src/features/auth/auth-provider";
 
 export const metadata: Metadata = {
   title: "Zapis.kz AI Sales",
@@ -18,7 +19,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="ru"
       className="h-full antialiased"
     >
-      <body className="min-h-full"><AppShell>{children}</AppShell></body>
+      <body className="min-h-full"><AuthProvider><AppShell>{children}</AppShell></AuthProvider></body>
     </html>
   );
 }

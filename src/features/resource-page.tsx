@@ -17,17 +17,6 @@ type Column = { key: string; label: string };
 type Config = { endpoint: string; columns: Column[]; statuses?: string[]; create?: boolean };
 
 const configs: Record<string, Config> = {
-  contacts: {
-    endpoint: "/contacts", create: true,
-    statuses: ["NEW", "IN_PROGRESS", "QUALIFIED", "REJECTED", "ERROR"],
-    columns: [
-      { key: "companyName", label: "Компания" }, { key: "phone", label: "Телефон" },
-      { key: "city", label: "Город" }, { key: "businessType", label: "Тип бизнеса" },
-      { key: "crmProvider", label: "CRM" }, { key: "strategyCode", label: "Стратегия" },
-      { key: "status", label: "Статус" }, { key: "outreachEligible", label: "Можно обрабатывать" },
-      { key: "createdAt", label: "Дата создания" },
-    ],
-  },
   conversations: {
     endpoint: "/conversations",
     statuses: ["NEW", "ACTIVE", "WAITING_CLIENT", "HANDOFF_REQUIRED", "QUALIFIED", "REJECTED", "CLOSED"],
