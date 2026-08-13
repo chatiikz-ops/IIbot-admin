@@ -1,2 +1,1 @@
-import { ResourcePage } from "@/src/features/resource-page";
-export default function Page(){return <ResourcePage type="leads"/>}
+import{LeadsPage}from"@/src/features/leads/leads-page";export default function Page(){return <LeadsPage/>}

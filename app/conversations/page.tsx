@@ -1,2 +1,1 @@
-import { ResourcePage } from "@/src/features/resource-page";
-export default function Page(){return <ResourcePage type="conversations"/>}
+import {ConversationsPage} from "@/src/features/conversations/conversations-page";export default function Page(){return <ConversationsPage/>}

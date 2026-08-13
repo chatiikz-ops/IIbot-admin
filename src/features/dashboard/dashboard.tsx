@@ -1,39 +1,5 @@
-"use client";
-
-import { useCallback, useEffect, useState } from "react";
-import { ApiError, api, unpackList } from "@/src/lib/api/client";
-import { Entity } from "@/src/types";
-import { BackendOfflineState, ErrorState, LoadingState, StatusBadge } from "@/src/components/ui/ui";
-import { dateTime, safe } from "@/src/lib/formatters";
-
-type Metric = { label: string; path: string; query?: Record<string,string>; value?: (payload: unknown) => number };
-const requests: Metric[] = [
-  {label:"Контакты",path:"/contacts"},
-  {label:"Новые",path:"/contacts",query:{status:"NEW"}},
-  {label:"В работе",path:"/contacts",query:{status:"IN_PROGRESS"}},
-  {label:"Квалифицированы",path:"/contacts",query:{status:"QUALIFIED"}},
-  {label:"Отклонены",path:"/contacts",query:{status:"REJECTED"}},
-  {label:"Исключены",path:"/classification/stats",value:excludedCount},
-  {label:"Лиды",path:"/leads"},
-  {label:"Активные диалоги",path:"/conversations",query:{status:"ACTIVE"}},
-];
-
-export function Dashboard(){
-  const [stats,setStats]=useState<(number|null)[]>([]); const [contacts,setContacts]=useState<Entity[]>([]); const [leads,setLeads]=useState<Entity[]>([]);
-  const [loading,setLoading]=useState(true); const [error,setError]=useState(""); const [offline,setOffline]=useState(false);
-  const load=useCallback(async()=>{setLoading(true);setError("");setOffline(false);
-    const metricResults=await Promise.allSettled(requests.map(item=>api.get(item.path,{query:{...item.query,page:item.path==="/classification/stats"?undefined:1,limit:item.path==="/classification/stats"?undefined:1}})));
-    const successful=metricResults.filter(item=>item.status==="fulfilled");
-    if(!successful.length){const reason=metricResults[0]?.status==="rejected"?metricResults[0].reason:undefined;setOffline(reason instanceof ApiError&&reason.status===0);setError(reason instanceof Error?reason.message:"Не удалось загрузить показатели");setLoading(false);return}
-    setStats(metricResults.map((result,index)=>result.status==="fulfilled"?(requests[index].value?.(result.value)??unpackList(result.value).total):null));
-    const recent=await Promise.allSettled([api.get("/contacts",{query:{page:1,limit:5}}),api.get("/leads",{query:{page:1,limit:5}})]);
-    if(recent[0].status==="fulfilled")setContacts(unpackList<Entity>(recent[0].value).items); if(recent[1].status==="fulfilled")setLeads(unpackList<Entity>(recent[1].value).items);
-    if(metricResults.some(item=>item.status==="rejected")||recent.some(item=>item.status==="rejected"))setError("Часть показателей временно недоступна. Остальные данные актуальны.");setLoading(false)
-  },[]);
-  useEffect(()=>{const id=setTimeout(load,0);return()=>clearTimeout(id)},[load]);
-  if(loading)return <LoadingState/>; if(offline)return <BackendOfflineState retry={load}/>;
-  return <section className="page">{error&&<ErrorState message={error} retry={load}/>}<div className="stat-grid">{requests.map((item,i)=><article className="stat" key={item.label}><span>{item.label}</span><strong>{stats[i]??"—"}</strong><small>{stats[i]===null?"Не удалось получить":"По данным backend"}</small></article>)}</div><div className="two-columns"><Recent title="Последние контакты" rows={contacts}/><Recent title="Последние лиды" rows={leads}/></div></section>
-}
-
-function excludedCount(payload:unknown){const value=(payload||{}) as {outreachEligible?:Record<string,number|string>};return Number(value.outreachEligible?.false||0)}
-function Recent({title,rows}:{title:string;rows:Entity[]}){return <article className="panel"><div className="panel-head"><h2>{title}</h2><StatusBadge>{rows.length}</StatusBadge></div>{rows.length?rows.map((r,i)=><div className="recent" key={r.id||i}><div><b>{safe(r.companyName||(r.contact as Entity)?.companyName)}</b><span>{safe(r.phone||(r.contact as Entity)?.phone)}</span></div><span>{dateTime(r.createdAt)}</span></div>):<p className="muted">Нет данных</p>}</article>}
+/* eslint-disable react-hooks/set-state-in-effect */
+"use client";import Link from"next/link";import{useCallback,useEffect,useState}from"react";import{api}from"@/src/lib/api/client";import{ErrorState,LoadingState,StatusBadge}from"@/src/components/ui/ui";
+type Summary={contacts:{total:number};conversations:{active:number;handoff:number};leads:{total:number};campaigns:{running:number;paused:number};automation:{enabled:boolean;autoReplyEnabled:boolean;campaignSendingEnabled:boolean};whatsapp:{connected:boolean}};
+export function Dashboard(){const[x,setX]=useState<Summary>(),[error,setError]=useState("");const load=useCallback(async()=>{try{setX(await api.get<Summary>("/dashboard/summary"));setError("")}catch(e){setError(e instanceof Error?e.message:"Не удалось загрузить сводку")}},[]);useEffect(()=>{void load()},[load]);if(!x&&!error)return <LoadingState/>;if(!x)return <ErrorState message={error} retry={load}/>;const attention=x.conversations.handoff>0||!x.whatsapp.connected||!x.automation.enabled||x.campaigns.paused>0;return <section className="page"><div className="feature-title"><div><h2>Что сейчас происходит в системе?</h2><p>Актуальная сводка по данным backend</p></div></div>{attention&&<div className="handoff"><b>Требует внимания</b><span>{x.conversations.handoff?`${x.conversations.handoff} диалогов ждут менеджера. `:""}{!x.whatsapp.connected?"WhatsApp отключён. ":""}{!x.automation.enabled?"Автоматизация выключена. ":""}{x.campaigns.paused?`${x.campaigns.paused} кампаний на паузе.`:""}</span></div>}<div className="stat-grid dashboard-stats">{[["Контакты",x.contacts.total,"/contacts"],["Активные диалоги",x.conversations.active,"/conversations"],["Лиды",x.leads.total,"/leads"],["Кампании",x.campaigns.running,"/campaigns"]].map(([label,value,href])=><Link className="stat" href={String(href)} key={String(label)}><span>{label}</span><strong>{value}</strong></Link>)}</div><div className="system-grid"><System title="WhatsApp" ok={x.whatsapp.connected}/><System title="AI-автоматизация" ok={x.automation.enabled}/><System title="Отправка кампаний" ok={x.automation.enabled&&x.automation.campaignSendingEnabled}/><System title="AI-автоответы" ok={x.automation.enabled&&x.automation.autoReplyEnabled}/></div></section>}
+function System({title,ok}:{title:string;ok:boolean}){return <article className="panel system-card"><h3>{title}</h3><StatusBadge tone={ok?"success":"warning"}>{ok?"Работает":"Выключено"}</StatusBadge></article>}

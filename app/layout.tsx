@@ -6,6 +6,8 @@ import "./campaigns.css";
 import "./whatsapp.css";
 import "./strategies.css";
 import "./settings.css";
+import "./features.css";
+import "./mobile-fixes.css";
 import { AuthProvider } from "@/src/features/auth/auth-provider";
 
 export const metadata: Metadata = {

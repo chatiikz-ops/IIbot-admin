@@ -1,0 +1,1 @@
+import{ConversationDetail}from"@/src/features/conversations/conversation-detail";export default async function Page({params}:{params:Promise<{id:string}>}){const{id}=await params;return <ConversationDetail id={id}/>}

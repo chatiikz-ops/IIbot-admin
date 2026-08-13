@@ -37,8 +37,17 @@ export type Campaign = Record<string, unknown> & {
   leadTargets?: number;
   rejectedTargets?: number;
   handoffTargets?: number;
+  processedCount?: number;
+  repliedCount?: number;
+  leadCount?: number;
+  rejectedCount?: number;
+  handoffCount?: number;
+  errorCount?: number;
   createdAt?: string;
   updatedAt?: string;
+  messageSentAt?: string;
+  errorMessage?: string | null;
+  strategyCode?: string | null;
 };
 
 export type CampaignTarget = Record<string, unknown> & {
