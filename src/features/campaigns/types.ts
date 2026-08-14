@@ -56,6 +56,9 @@ export type CampaignTarget = Record<string, unknown> & {
   contact?: Record<string, unknown>;
   contactId?: string;
   updatedAt?: string;
+  strategyCode?: string | null;
+  messageSentAt?: string | null;
+  errorMessage?: string | null;
 };
 
 export type CampaignLog = Record<string, unknown> & {

@@ -107,6 +107,7 @@ export const WHATSAPP_DIRECTION_LABELS: Record<string, string> = {
 };
 
 export const WHATSAPP_MESSAGE_STATUS_LABELS: Record<string, string> = {
+  PLAYED: "Прослушано",
   PENDING: "Ожидает отправки", QUEUED: "В очереди", SENT: "Отправлено",
   DELIVERED: "Доставлено", READ: "Прочитано", RECEIVED: "Получено",
   FAILED: "Ошибка", ERROR: "Ошибка",

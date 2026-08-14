@@ -1,4 +1,11 @@
-export type WhatsAppState = "CONNECTED" | "QR_REQUIRED" | "INITIALIZING" | "DISCONNECTED" | "ERROR" | string;
+export type WhatsAppState =
+  | "CONNECTED"
+  | "QR_REQUIRED"
+  | "INITIALIZING"
+  | "AUTH_FAILURE"
+  | "DISCONNECTED"
+  | "ERROR"
+  | string;
 export type WhatsAppStatus = {
   enabled: boolean;
   status: WhatsAppState;
@@ -8,6 +15,29 @@ export type WhatsAppStatus = {
   lastConnectedAt: string | null;
   lastDisconnectedAt: string | null;
   qrAvailable: boolean;
+  lastError?: string | null;
+  generation?: number;
+  lifecycleState?: string;
 };
-export type WhatsAppQr = { available: boolean; qrDataUrl?: string; createdAt?: string; expiresAt?: string };
-export type WhatsAppMessage = Record<string,unknown> & { id:string; direction?:string; phone?:string; phoneNumber?:string; to?:string; from?:string; body?:string; text?:string; message?:string; status?:string; createdAt?:string };
+export type WhatsAppQr = {
+  available: boolean;
+  qrDataUrl?: string;
+  createdAt?: string;
+  expiresAt?: string;
+  generation?: number;
+  lifecycleState?: string;
+  reason?: string;
+};
+export type WhatsAppMessage = Record<string, unknown> & {
+  id: string;
+  direction?: string;
+  phone?: string;
+  phoneNumber?: string;
+  to?: string;
+  from?: string;
+  body?: string;
+  text?: string;
+  message?: string;
+  status?: string;
+  createdAt?: string;
+};
