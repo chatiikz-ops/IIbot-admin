@@ -50,11 +50,20 @@ test("new generation rejects the previous QR", () => {
   );
 });
 
-test("READY hides QR", () => {
+test("available QR takes priority while backend reports it", () => {
   assert.equal(
     resolveWhatsAppConnectionView(status("CONNECTED", true)),
-    "connected",
+    "qr",
   );
+});
+
+test("every WhatsApp connection status has a deliberate view", () => {
+  const expected = {DISABLED:"disabled",INITIALIZING:"initializing",QR_REQUIRED:"qr",AUTHENTICATING:"authenticating",CONNECTED:"connected",DISCONNECTED:"disconnected",AUTH_FAILURE:"auth-failure",ERROR:"error"};
+  for (const [backendStatus, view] of Object.entries(expected)) assert.equal(resolveWhatsAppConnectionView(status(backendStatus)), view);
+});
+
+test("unknown connection status has a safe fallback", () => {
+  assert.equal(resolveWhatsAppConnectionView(status("FUTURE_STATUS")), "unknown");
 });
 
 test("stale CONNECTED label without a live connection does not expose tools", () => {

@@ -4,21 +4,26 @@ export type WhatsAppConnectionView =
   | "connected"
   | "qr"
   | "initializing"
+  | "authenticating"
   | "auth-failure"
+  | "disabled"
   | "disconnected"
   | "error"
-  | "none";
+  | "unknown";
 
 export function resolveWhatsAppConnectionView(
   status: WhatsAppStatus,
 ): WhatsAppConnectionView {
-  if (status.status === "CONNECTED" && status.connected === true) return "connected";
   if (status.qrAvailable) return "qr";
+  if (status.status === "CONNECTED" && status.connected === true) return "connected";
+  if (status.status === "QR_REQUIRED") return "qr";
   if (status.status === "INITIALIZING") return "initializing";
+  if (status.status === "AUTHENTICATING") return "authenticating";
   if (status.status === "AUTH_FAILURE") return "auth-failure";
+  if (status.status === "DISABLED") return "disabled";
   if (status.status === "DISCONNECTED") return "disconnected";
   if (status.status === "ERROR") return "error";
-  return "none";
+  return "unknown";
 }
 
 export function belongsToCurrentGeneration(

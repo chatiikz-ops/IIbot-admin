@@ -40,5 +40,5 @@ function Metric({label,value}:{label:string;value:number}){return <article><span
 function Notice({title,values}:{title:string;values:string[]}){return <div className="notice"><b>{title}</b><p>{values.join(", ")}</p></div>}
 function list(value:Entity|null,key:string){const item=value?.[key];return Array.isArray(item)?item.filter((x):x is string=>typeof x==="string"):[]}
 function readMapping(value:Entity|null){const item=value?.mapping;if(!item||typeof item!=="object"||Array.isArray(item))return {};return Object.fromEntries(Object.entries(item).filter((entry):entry is [string,string]=>typeof entry[1]==="string"))}
-function isCompleted(value:Entity|null){return ["COMPLETED","CONFIRMED","IMPORTED","DONE"].includes(String(value?.status||"").toUpperCase())}
+function isCompleted(value:Entity|null){return String(value?.status||"").toUpperCase()==="COMPLETED"}
 function humanError(value:unknown){if(Array.isArray(value))return value.join("; ");return typeof value==="string"?value:"—"}

@@ -1,3 +1,5 @@
+import type { CampaignTargetStatus } from "@/src/lib/constants/backend-enums";
+
 export type CampaignStatus = "DRAFT" | "SCHEDULED" | "RUNNING" | "PAUSED" | "COMPLETED" | "CANCELLED";
 export type CampaignSourceType = "ALL_CONTACTS" | "IMPORT_JOB";
 
@@ -52,7 +54,7 @@ export type Campaign = Record<string, unknown> & {
 
 export type CampaignTarget = Record<string, unknown> & {
   id: string;
-  status: string;
+  status: CampaignTargetStatus;
   contact?: Record<string, unknown>;
   contactId?: string;
   updatedAt?: string;

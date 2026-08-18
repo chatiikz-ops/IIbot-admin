@@ -54,20 +54,19 @@ export const PROMPT_STRATEGY_STATUS_LABELS: Record<string, string> = {
 };
 
 export const IMPORT_STATUS_LABELS: Record<string, string> = {
-  PENDING: "Ожидает проверки",
   PREVIEW: "Предварительная проверка",
-  MAPPING_REQUIRED: "Требуется сопоставление",
   READY: "Готов к импорту",
-  PROCESSING: "Импортируется",
-  CONFIRMED: "Подтверждён",
+  IMPORTING: "Импортируется",
   COMPLETED: "Завершён",
-  IMPORTED: "Импортирован",
-  DONE: "Завершён",
   FAILED: "Ошибка импорта",
+};
+
+export const IMPORT_ROW_STATUS_LABELS: Record<string, string> = {
   VALID: "Корректная строка",
   INVALID: "Ошибка в строке",
   DUPLICATE_IN_FILE: "Дубликат в файле",
   DUPLICATE_IN_DATABASE: "Уже есть в базе",
+  IMPORTED: "Импортирована",
 };
 
 export const CAMPAIGN_STATUS_LABELS: Record<string, string> = {
@@ -76,8 +75,8 @@ export const CAMPAIGN_STATUS_LABELS: Record<string, string> = {
 };
 
 export const CAMPAIGN_TARGET_STATUS_LABELS: Record<string, string> = {
-  PENDING: "Ожидает", READY: "Готов", QUEUED: "В очереди", PROCESSING: "Обрабатывается",
-  SENT: "Сообщение отправлено", WAITING_REPLY: "Ждём ответа", REPLIED: "Ответил",
+  WAITING: "Ожидает", READY: "Готов", QUEUED: "В очереди", PROCESSING: "Обрабатывается",
+  MESSAGE_SENT: "Сообщение отправлено", WAITING_REPLY: "Ждём ответа", REPLIED: "Ответил",
   LEAD: "Лид", HANDOFF: "Передан менеджеру", REJECTED: "Отказ", ERROR: "Ошибка",
   SKIPPED: "Пропущен",
 };
@@ -97,9 +96,14 @@ export const CAMPAIGN_SOURCE_LABELS: Record<string, string> = {
 };
 
 export const WHATSAPP_STATUS_LABELS: Record<string, string> = {
-  CONNECTED: "Подключен", QR_REQUIRED: "Ожидает подключения",
-  INITIALIZING: "Создание QR", DISCONNECTED: "Отключен",
-  ERROR: "Ошибка авторизации", AUTHENTICATED: "Авторизация выполнена",
+  DISABLED: "Отключён",
+  INITIALIZING: "Подготовка WhatsApp",
+  QR_REQUIRED: "Требуется QR-код",
+  AUTHENTICATING: "Авторизация WhatsApp",
+  CONNECTED: "Подключён",
+  DISCONNECTED: "Соединение потеряно",
+  AUTH_FAILURE: "Ошибка авторизации",
+  ERROR: "Ошибка подключения",
 };
 
 export const WHATSAPP_DIRECTION_LABELS: Record<string, string> = {
@@ -107,10 +111,9 @@ export const WHATSAPP_DIRECTION_LABELS: Record<string, string> = {
 };
 
 export const WHATSAPP_MESSAGE_STATUS_LABELS: Record<string, string> = {
-  PLAYED: "Прослушано",
-  PENDING: "Ожидает отправки", QUEUED: "В очереди", SENT: "Отправлено",
+  PENDING: "Ожидает отправки", OUTCOME_UNKNOWN: "Результат отправки неизвестен", SENT: "Отправлено",
   DELIVERED: "Доставлено", READ: "Прочитано", RECEIVED: "Получено",
-  FAILED: "Ошибка", ERROR: "Ошибка",
+  FAILED: "Ошибка отправки",
 };
 
 export const STRATEGY_LABELS: Record<string, string> = {
@@ -135,10 +138,7 @@ export const STRATEGY_LABELS: Record<string, string> = {
 
 export const SKIP_REASON_LABELS: Record<string, string> = {
   EXISTING_ZAPIS_CLIENT: "Уже является клиентом Zapis.kz",
-  INVALID_PHONE: "Некорректный номер телефона",
-  PHONE_MISSING: "Не указан номер телефона",
-  DUPLICATE: "Дубликат контакта",
-  UNSUPPORTED_BUSINESS: "Неподходящий тип бизнеса",
+  MISSING_PHONE: "Не указан номер телефона",
   MANUALLY_EXCLUDED: "Исключён вручную",
 };
 
@@ -178,6 +178,7 @@ export function enumLabel(value: unknown, context: EntityLabelContext = "generic
     || STRATEGY_LABELS[key]
     || SKIP_REASON_LABELS[key]
     || IMPORT_STATUS_LABELS[key]
+    || IMPORT_ROW_STATUS_LABELS[key]
     || CAMPAIGN_STATUS_LABELS[key]
     || CAMPAIGN_TARGET_STATUS_LABELS[key]
     || CAMPAIGN_EVENT_LABELS[key]
@@ -214,6 +215,5 @@ function lookup(labels: Record<string, string>, value: unknown): string {
 
 function humanizeUnknown(value: string): string {
   if (!/^[A-Z][A-Z0-9_]*$/.test(value)) return value;
-  const words = value.toLowerCase().replaceAll("_", " ");
-  return words.charAt(0).toUpperCase() + words.slice(1);
+  return `Неизвестное значение (${value})`;
 }

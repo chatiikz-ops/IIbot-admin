@@ -16,6 +16,7 @@ import {
   WHATSAPP_DIRECTION_LABELS,
   WHATSAPP_MESSAGE_STATUS_LABELS,
   WHATSAPP_STATUS_LABELS,
+  enumLabel,
 } from "@/src/lib/constants/labels";
 import {
   BackendOfflineState,
@@ -102,6 +103,7 @@ export function WhatsAppPage() {
     if (
       status?.status !== "INITIALIZING" &&
       status?.status !== "QR_REQUIRED" &&
+      status?.status !== "AUTHENTICATING" &&
       status?.status !== "AUTH_FAILURE" &&
       busy !== "reconnect"
     )
@@ -110,7 +112,7 @@ export function WhatsAppPage() {
     return () => clearInterval(interval);
   }, [status?.status, busy, loadStatus]);
   useEffect(() => {
-    if (!["CONNECTED", "DISCONNECTED", "ERROR"].includes(status?.status || "")) return;
+    if (!["CONNECTED", "DISCONNECTED", "DISABLED", "ERROR"].includes(status?.status || "")) return;
     const interval = setInterval(() => loadStatus(true), 10000);
     return () => clearInterval(interval);
   }, [status?.status, loadStatus]);
@@ -222,7 +224,7 @@ export function WhatsAppPage() {
             <Smartphone />
             <h2>WhatsApp</h2>
             <StatusBadge tone={statusTone(status.status)}>
-              {WHATSAPP_STATUS_LABELS[status.status] || "Неизвестное состояние"}
+              {WHATSAPP_STATUS_LABELS[status.status] || enumLabel(status.status)}
             </StatusBadge>
           </div>
           {connectionView === "connected" && <div className="wa-facts">
@@ -237,8 +239,9 @@ export function WhatsAppPage() {
               value={status.qrAvailable ? "Да" : "Нет"}
             />
           </div>}
+          {status.lifecycleState && <p className="muted">Этап подключения: {status.lifecycleState}</p>}
           <div className="wa-actions">
-            {["DISCONNECTED", "AUTH_FAILURE", "ERROR"].includes(
+            {["DISABLED", "DISCONNECTED", "AUTH_FAILURE", "ERROR"].includes(
               status.status,
             ) && (
               <Button loading={busy === "reconnect"} onClick={requestNewQr}>
@@ -298,9 +301,12 @@ export function WhatsAppPage() {
         <WhatsAppQrConnect qr={visibleQr} error={qrError} retry={loadQr} />
       ) : connectionView === "initializing" ? (
         <WhatsAppInitializing />
+      ) : connectionView === "authenticating" ? (
+        <WhatsAppInitializing title="Авторизация WhatsApp" description="Подтверждаем подключение устройства" />
       ) : connectionView === "auth-failure" ? (
         <WhatsAppDisconnected
           title="Не удалось авторизоваться"
+          error={status.lastError}
           busy={busy === "reconnect"}
           retry={requestNewQr}
         />
@@ -313,10 +319,15 @@ export function WhatsAppPage() {
       ) : connectionView === "error" ? (
         <WhatsAppDisconnected
           title="Ошибка подключения WhatsApp"
+          error={status.lastError}
           busy={busy === "reconnect"}
           retry={requestNewQr}
         />
-      ) : null}
+      ) : connectionView === "disabled" ? (
+        <WhatsAppDisconnected title="WhatsApp отключён" busy={busy === "reconnect"} retry={requestNewQr} />
+      ) : (
+        <WhatsAppDisconnected title="Неизвестный статус WhatsApp" error={String(status.status)} busy={busy === "reconnect"} retry={requestNewQr} />
+      )}
       {connectionView === "connected" && status.connected && <div className="whatsapp-grid">
         <WhatsAppMessages tab={tab} onTab={setTab} refreshKey={messagesRefresh} />
         <WhatsAppTestSend
@@ -369,8 +380,8 @@ export function WhatsAppPage() {
 function WhatsAppConnectedDashboard() {
   return <div className="connected-panel"><CheckCircle2 /><h3>WhatsApp подключён</h3><p>Канал готов к ручной проверке сообщений.</p></div>;
 }
-function WhatsAppInitializing() {
-  return <div className="qr-panel"><div className="qr-skeleton" /><h3>Подготавливаем WhatsApp...</h3><p>QR-код появится автоматически</p></div>;
+function WhatsAppInitializing({title="Подготавливаем WhatsApp...",description="QR-код появится автоматически"}:{title?:string;description?:string}) {
+  return <div className="qr-panel"><div className="qr-skeleton" /><h3>{title}</h3><p>{description}</p></div>;
 }
 function WhatsAppQrConnect({
   qr,
@@ -426,14 +437,17 @@ function WhatsAppDisconnected({
   title,
   busy,
   retry,
+  error,
 }: {
   title: string;
   busy: boolean;
   retry: () => void;
+  error?: string | null;
 }) {
   return (
     <div className="qr-panel">
       <h3>{title}</h3>
+      {error && <p className="form-error">{error}</p>}
       <Button loading={busy} onClick={retry}>
         <RotateCcw size={15} /> Получить новый QR
       </Button>
@@ -675,9 +689,9 @@ function Fact({ label, value }: { label: string; value: unknown }) {
 function statusTone(status: string) {
   return status === "CONNECTED"
     ? "success"
-    : status === "ERROR"
+    : status === "ERROR" || status === "AUTH_FAILURE"
       ? "danger"
-      : status === "INITIALIZING"
+      : status === "INITIALIZING" || status === "AUTHENTICATING"
         ? "info"
         : "warning";
 }

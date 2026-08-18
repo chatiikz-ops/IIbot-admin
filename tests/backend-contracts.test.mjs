@@ -1,0 +1,11 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { automationSettingsPatch,AUTOMATION_SETTING_FIELDS } from "../src/features/settings/automation-contract.ts";
+import { validatePromptDraft } from "../src/features/prompt-strategies/validation.ts";
+import { CAMPAIGN_TARGET_STATUSES,IMPORT_ROW_STATUSES,IMPORT_STATUSES,OUTREACH_SKIP_REASONS,WHATSAPP_CONNECTION_STATUSES,WHATSAPP_MESSAGE_STATUSES } from "../src/lib/constants/backend-enums.ts";
+import { CAMPAIGN_TARGET_STATUS_LABELS,IMPORT_ROW_STATUS_LABELS,IMPORT_STATUS_LABELS,SKIP_REASON_LABELS,WHATSAPP_MESSAGE_STATUS_LABELS,WHATSAPP_STATUS_LABELS,enumLabel } from "../src/lib/constants/labels.ts";
+
+test("automation PATCH contains DTO fields only",()=>{const readModel={id:"id",singletonKey:"default",createdAt:"old",updatedAt:"new",enabled:true,autoReplyEnabled:true,campaignSendingEnabled:false,maxAutoRepliesPerConversation:5,responseDelayMinSeconds:1,responseDelayMaxSeconds:3,workingHoursEnabled:true,workingHoursStart:"09:00",workingHoursEnd:"18:00",timezone:"Asia/Almaty"};const payload=automationSettingsPatch(readModel);assert.deepEqual(Object.keys(payload),[...AUTOMATION_SETTING_FIELDS]);assert.equal("id" in payload,false);assert.equal("updatedAt" in payload,false)});
+test("backend enum labels are complete and exact",()=>{for(const [values,labels] of [[IMPORT_STATUSES,IMPORT_STATUS_LABELS],[IMPORT_ROW_STATUSES,IMPORT_ROW_STATUS_LABELS],[CAMPAIGN_TARGET_STATUSES,CAMPAIGN_TARGET_STATUS_LABELS],[OUTREACH_SKIP_REASONS,SKIP_REASON_LABELS],[WHATSAPP_CONNECTION_STATUSES,WHATSAPP_STATUS_LABELS],[WHATSAPP_MESSAGE_STATUSES,WHATSAPP_MESSAGE_STATUS_LABELS]])assert.deepEqual(Object.keys(labels).sort(),[...values].sort())});
+test("empty qualification questions are rejected after cleaning",()=>{const draft={systemInstruction:"role",objective:"goal",firstMessage:"hello",communicationRules:"short",qualificationQuestions:[" ",""],sellingPoints:["value"],competitorContext:"",handoffRules:"handoff",stopRules:"stop",forbiddenActions:["no promise"],closingRules:"bye",maxAssistantMessages:5,changeNote:"",metadata:null};assert.match(validatePromptDraft(draft).qualificationQuestions,/хотя бы один вопрос/)});
+test("unknown backend enums produce a safe understandable label",()=>assert.equal(enumLabel("FUTURE_STATUS"),"Неизвестное значение (FUTURE_STATUS)"));

@@ -1,11 +1,6 @@
-export type WhatsAppState =
-  | "CONNECTED"
-  | "QR_REQUIRED"
-  | "INITIALIZING"
-  | "AUTH_FAILURE"
-  | "DISCONNECTED"
-  | "ERROR"
-  | string;
+import type { WhatsAppConnectionStatus, WhatsAppMessageStatus } from "@/src/lib/constants/backend-enums";
+
+export type WhatsAppState = WhatsAppConnectionStatus;
 export type WhatsAppStatus = {
   enabled: boolean;
   status: WhatsAppState;
@@ -38,6 +33,6 @@ export type WhatsAppMessage = Record<string, unknown> & {
   body?: string;
   text?: string;
   message?: string;
-  status?: string;
+  status?: WhatsAppMessageStatus;
   createdAt?: string;
 };
