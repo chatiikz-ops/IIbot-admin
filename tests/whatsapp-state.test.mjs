@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   belongsToCurrentGeneration,
   resolveWhatsAppConnectionView,
+  whatsappPollingMs,
 } from "../src/features/whatsapp/whatsapp-state.ts";
 
 const status = (state, qrAvailable = false, generation = 1) => ({
@@ -90,4 +91,18 @@ test("QR request timeout keeps the local QR connection area", () => {
     resolveWhatsAppConnectionView(status("QR_REQUIRED", true)),
     "qr",
   );
+});
+
+test("READY never renders an endless authenticating loader", () => {
+  assert.equal(resolveWhatsAppConnectionView({
+    ...status("AUTHENTICATING"),
+    lifecycleState: "READY",
+  }), "state-warning");
+});
+
+test("polling is fast while connecting and relaxed after connected", () => {
+  assert.equal(whatsappPollingMs("INITIALIZING"), 2_000);
+  assert.equal(whatsappPollingMs("QR_REQUIRED"), 2_000);
+  assert.equal(whatsappPollingMs("AUTHENTICATING"), 2_000);
+  assert.equal(whatsappPollingMs("CONNECTED"), 12_000);
 });

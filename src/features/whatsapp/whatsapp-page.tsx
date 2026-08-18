@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import {
   CheckCircle2,
   Link2,
@@ -35,6 +35,8 @@ import { WhatsAppMessage, WhatsAppQr, WhatsAppStatus } from "./types";
 import {
   belongsToCurrentGeneration,
   resolveWhatsAppConnectionView,
+  WHATSAPP_AUTHENTICATING_WARNING_MS,
+  whatsappPollingMs,
 } from "./whatsapp-state";
 
 type Tab = "messages" | "unmatched";
@@ -51,13 +53,28 @@ export function WhatsAppPage() {
   const [tab, setTab] = useState<Tab>("messages");
   const [notice, setNotice] = useState("");
   const [messagesRefresh, setMessagesRefresh] = useState(0);
+  const [authenticatingTooLong, setAuthenticatingTooLong] = useState(false);
+  const statusRequestInFlight = useRef(false);
+  const qrRequestInFlight = useRef(false);
+  const currentStatus = useRef<WhatsAppStatus | null>(null);
   const loadStatus = useCallback(async (silent = false) => {
+    if (statusRequestInFlight.current) return;
+    statusRequestInFlight.current = true;
     if (!silent) setLoading(true);
     try {
       const value = await api.get<WhatsAppStatus>("/whatsapp/status", {
         timeout: 6000,
       });
+      const previous = currentStatus.current;
+      if (
+        value.status !== "AUTHENTICATING" ||
+        previous?.status !== "AUTHENTICATING" ||
+        previous.generation !== value.generation
+      ) {
+        setAuthenticatingTooLong(false);
+      }
       setStatus(value);
+      currentStatus.current = value;
       setOffline(false);
       setConnectionError("");
       if (value.status === "CONNECTED" || !value.qrAvailable) setQr(null);
@@ -67,10 +84,13 @@ export function WhatsAppPage() {
         caught instanceof Error ? caught.message : "Backend недоступен",
       );
     } finally {
+      statusRequestInFlight.current = false;
       if (!silent) setLoading(false);
     }
   }, []);
   const loadQr = useCallback(async () => {
+    if (qrRequestInFlight.current || currentStatus.current?.status === "CONNECTED") return;
+    qrRequestInFlight.current = true;
     setQrError("");
     try {
       const value = await api.get<WhatsAppQr>("/whatsapp/qr");
@@ -88,6 +108,8 @@ export function WhatsAppPage() {
       setQrError(
         caught instanceof Error ? caught.message : "Не удалось получить QR-код",
       );
+    } finally {
+      qrRequestInFlight.current = false;
     }
   }, []);
   useEffect(() => {
@@ -100,27 +122,30 @@ export function WhatsAppPage() {
     return () => clearTimeout(timer);
   }, [status?.qrAvailable, status?.generation, loadQr]);
   useEffect(() => {
-    if (
-      status?.status !== "INITIALIZING" &&
-      status?.status !== "QR_REQUIRED" &&
-      status?.status !== "AUTHENTICATING" &&
-      status?.status !== "AUTH_FAILURE" &&
-      busy !== "reconnect"
-    )
-      return;
-    const interval = setInterval(() => loadStatus(true), 2000);
+    if (!status) return;
+    const interval = setInterval(
+      () => void loadStatus(true),
+      whatsappPollingMs(status.status),
+    );
     return () => clearInterval(interval);
-  }, [status?.status, busy, loadStatus]);
-  useEffect(() => {
-    if (!["CONNECTED", "DISCONNECTED", "DISABLED", "ERROR"].includes(status?.status || "")) return;
-    const interval = setInterval(() => loadStatus(true), 10000);
-    return () => clearInterval(interval);
-  }, [status?.status, loadStatus]);
+  }, [status, loadStatus]);
   useEffect(() => {
     if (!status?.qrAvailable) return;
-    const interval = setInterval(loadQr, 15000);
+    const interval = setInterval(() => void loadQr(), 15000);
     return () => clearInterval(interval);
   }, [status?.qrAvailable, status?.generation, loadQr]);
+  useEffect(() => {
+    if (
+      status?.status !== "AUTHENTICATING" ||
+      status.lifecycleState === "READY"
+    )
+      return;
+    const timer = setTimeout(
+      () => setAuthenticatingTooLong(true),
+      WHATSAPP_AUTHENTICATING_WARNING_MS,
+    );
+    return () => clearTimeout(timer);
+  }, [status?.status, status?.generation, status?.lifecycleState]);
   async function action(endpoint: string, success: string) {
     if (busy) return;
     setBusy(endpoint);
@@ -302,7 +327,13 @@ export function WhatsAppPage() {
       ) : connectionView === "initializing" ? (
         <WhatsAppInitializing />
       ) : connectionView === "authenticating" ? (
-        <WhatsAppInitializing title="Авторизация WhatsApp" description="Подтверждаем подключение устройства" />
+        authenticatingTooLong ? (
+          <WhatsAppStatusWarning refresh={() => loadStatus()} />
+        ) : (
+          <WhatsAppInitializing title="Подтверждаем подключение WhatsApp" description="Проверяем авторизацию устройства" />
+        )
+      ) : connectionView === "state-warning" ? (
+        <WhatsAppStatusWarning refresh={() => loadStatus()} />
       ) : connectionView === "auth-failure" ? (
         <WhatsAppDisconnected
           title="Не удалось авторизоваться"
@@ -382,6 +413,9 @@ function WhatsAppConnectedDashboard() {
 }
 function WhatsAppInitializing({title="Подготавливаем WhatsApp...",description="QR-код появится автоматически"}:{title?:string;description?:string}) {
   return <div className="qr-panel"><div className="qr-skeleton" /><h3>{title}</h3><p>{description}</p></div>;
+}
+function WhatsAppStatusWarning({ refresh }: { refresh: () => void }) {
+  return <div className="qr-panel"><h3>Подключение занимает больше времени, чем обычно</h3><p>Обновите статус. Переподключение автоматически не запускается.</p><Button variant="secondary" onClick={refresh}><RefreshCw size={15} /> Обновить статус</Button></div>;
 }
 function WhatsAppQrConnect({
   qr,
