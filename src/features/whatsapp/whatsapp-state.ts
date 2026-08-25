@@ -1,48 +1,52 @@
 import type { WhatsAppQr, WhatsAppStatus } from "./types.ts";
 
+export const WHATSAPP_ACTION_ENDPOINTS = {
+  initialize: "/whatsapp/initialize",
+  reconnect: "/whatsapp/reconnect",
+  destroy: "/whatsapp/destroy",
+  logout: "/whatsapp/logout",
+} as const;
+export type WhatsAppAction = keyof typeof WHATSAPP_ACTION_ENDPOINTS;
+
 export type WhatsAppConnectionView =
-  | "connected"
-  | "qr"
-  | "initializing"
-  | "authenticating"
-  | "state-warning"
-  | "auth-failure"
-  | "disabled"
-  | "disconnected"
-  | "error"
-  | "unknown";
+  | "disabled" | "idle" | "starting" | "qr" | "authenticating"
+  | "connected" | "disconnecting" | "logging-out" | "error" | "unknown";
 
-export function resolveWhatsAppConnectionView(
-  status: WhatsAppStatus,
-): WhatsAppConnectionView {
-  if (status.qrAvailable) return "qr";
-  if (status.status === "CONNECTED" && status.connected === true) return "connected";
-  if (status.lifecycleState === "READY") return "state-warning";
-  if (status.status === "QR_REQUIRED") return "qr";
-  if (status.status === "INITIALIZING") return "initializing";
-  if (status.status === "AUTHENTICATING") return "authenticating";
-  if (status.status === "AUTH_FAILURE") return "auth-failure";
-  if (status.status === "DISABLED") return "disabled";
-  if (status.status === "DISCONNECTED") return "disconnected";
-  if (status.status === "ERROR") return "error";
-  return "unknown";
+export function resolveWhatsAppConnectionView(status: WhatsAppStatus): WhatsAppConnectionView {
+  switch (status.state) {
+    case "DISABLED": return "disabled";
+    case "IDLE": return "idle";
+    case "STARTING": return "starting";
+    case "QR_REQUIRED": return "qr";
+    case "AUTHENTICATING": return "authenticating";
+    case "CONNECTED": return status.connected ? "connected" : "unknown";
+    case "DISCONNECTING": return "disconnecting";
+    case "LOGGING_OUT": return "logging-out";
+    case "ERROR": return "error";
+    default: return "unknown";
+  }
 }
 
-export const WHATSAPP_AUTHENTICATING_WARNING_MS = 30_000;
-
-export function whatsappPollingMs(status: WhatsAppStatus["status"]) {
-  if (["INITIALIZING", "QR_REQUIRED", "AUTHENTICATING"].includes(status)) return 2_000;
-  if (status === "CONNECTED") return 12_000;
-  return 10_000;
+export function whatsappPollingMs(state: WhatsAppStatus["state"]) {
+  return ["STARTING", "QR_REQUIRED", "AUTHENTICATING", "DISCONNECTING", "LOGGING_OUT"].includes(state) ? 1_500 : 12_000;
 }
 
-export function belongsToCurrentGeneration(
-  status: WhatsAppStatus,
-  qr: WhatsAppQr,
-) {
-  return (
-    qr.generation === undefined ||
-    status.generation === undefined ||
-    qr.generation === status.generation
-  );
+export function shouldRequestQr(status: WhatsAppStatus) {
+  return status.state === "QR_REQUIRED" && status.qrAvailable;
+}
+
+export function connectionActionsDisabled(status: WhatsAppStatus, busy: string) {
+  return Boolean(busy) || status.state === "DISCONNECTING" || status.state === "LOGGING_OUT";
+}
+
+export type InFlightSlot<T> = { current: Promise<T> | null };
+export function runSingleFlight<T>(slot: InFlightSlot<T>, task: () => Promise<T>) {
+  if (slot.current) return slot.current;
+  const request = task();
+  slot.current = request;
+  return request.finally(() => { if (slot.current === request) slot.current = null; });
+}
+
+export function belongsToCurrentGeneration(status: WhatsAppStatus, qr: WhatsAppQr) {
+  return typeof qr.generation === "number" && qr.generation === status.generation;
 }

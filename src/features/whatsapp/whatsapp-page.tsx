@@ -34,8 +34,12 @@ import {
 import { WhatsAppMessage, WhatsAppQr, WhatsAppStatus } from "./types";
 import {
   belongsToCurrentGeneration,
+  connectionActionsDisabled,
   resolveWhatsAppConnectionView,
-  WHATSAPP_AUTHENTICATING_WARNING_MS,
+  runSingleFlight,
+  shouldRequestQr,
+  WHATSAPP_ACTION_ENDPOINTS,
+  type WhatsAppAction,
   whatsappPollingMs,
 } from "./whatsapp-state";
 
@@ -49,180 +53,87 @@ export function WhatsAppPage() {
   const [qrError, setQrError] = useState("");
   const [busy, setBusy] = useState("");
   const [logoutOpen, setLogoutOpen] = useState(false);
-  const [switchOpen, setSwitchOpen] = useState(false);
   const [tab, setTab] = useState<Tab>("messages");
   const [notice, setNotice] = useState("");
   const [messagesRefresh, setMessagesRefresh] = useState(0);
-  const [authenticatingTooLong, setAuthenticatingTooLong] = useState(false);
-  const statusRequestInFlight = useRef(false);
-  const qrRequestInFlight = useRef(false);
+  const statusRequestInFlight = useRef<Promise<void> | null>(null);
+  const qrRequestInFlight = useRef<Promise<void> | null>(null);
+  const actionInFlight = useRef(false);
   const currentStatus = useRef<WhatsAppStatus | null>(null);
   const loadStatus = useCallback(async (silent = false) => {
-    if (statusRequestInFlight.current) return;
-    statusRequestInFlight.current = true;
-    if (!silent) setLoading(true);
-    try {
-      const value = await api.get<WhatsAppStatus>("/whatsapp/status", {
-        timeout: 6000,
-      });
-      const previous = currentStatus.current;
-      if (
-        value.status !== "AUTHENTICATING" ||
-        previous?.status !== "AUTHENTICATING" ||
-        previous.generation !== value.generation
-      ) {
-        setAuthenticatingTooLong(false);
+    return runSingleFlight(statusRequestInFlight, async () => {
+      if (!silent) setLoading(true);
+      try {
+        const value = await api.get<WhatsAppStatus>("/whatsapp/status", { timeout: 6000 });
+        setStatus(value);
+        currentStatus.current = value;
+        setOffline(false);
+        setConnectionError("");
+        if (!shouldRequestQr(value)) { setQr(null); setQrError(""); }
+      } catch (caught) {
+        setOffline(true);
+        setConnectionError(caught instanceof Error ? caught.message : "Backend недоступен");
+      } finally {
+        if (!silent) setLoading(false);
       }
-      setStatus(value);
-      currentStatus.current = value;
-      setOffline(false);
-      setConnectionError("");
-      if (value.status === "CONNECTED" || !value.qrAvailable) setQr(null);
-    } catch (caught) {
-      setOffline(true);
-      setConnectionError(
-        caught instanceof Error ? caught.message : "Backend недоступен",
-      );
-    } finally {
-      statusRequestInFlight.current = false;
-      if (!silent) setLoading(false);
-    }
+    });
   }, []);
   const loadQr = useCallback(async () => {
-    if (qrRequestInFlight.current || currentStatus.current?.status === "CONNECTED") return;
-    qrRequestInFlight.current = true;
-    setQrError("");
-    try {
-      const value = await api.get<WhatsAppQr>("/whatsapp/qr");
-      if (
-        value.available &&
-        value.qrDataUrl &&
-        !value.qrDataUrl.startsWith("data:image/png;base64,")
-      ) {
-        setQr(null);
-        setQrError("Backend вернул некорректный QR-код");
-        return;
-      }
-      setQr(value);
-    } catch (caught) {
-      setQrError(
-        caught instanceof Error ? caught.message : "Не удалось получить QR-код",
-      );
-    } finally {
-      qrRequestInFlight.current = false;
-    }
+    if (!currentStatus.current || !shouldRequestQr(currentStatus.current)) return;
+    return runSingleFlight(qrRequestInFlight, async () => {
+      setQrError("");
+      try {
+        const value = await api.get<WhatsAppQr>("/whatsapp/qr");
+        if (!currentStatus.current || !shouldRequestQr(currentStatus.current) || !belongsToCurrentGeneration(currentStatus.current, value)) return;
+        if (value.available && value.qrDataUrl && !value.qrDataUrl.startsWith("data:image/png;base64,")) { setQr(null); setQrError("Backend вернул некорректный QR-код"); return; }
+        setQr(value);
+      } catch (caught) { setQrError(caught instanceof Error ? caught.message : "Не удалось получить QR-код"); }
+    });
   }, []);
+  const currentState = status?.state;
+  const qrShouldLoad = status ? shouldRequestQr(status) : false;
   useEffect(() => {
     const timer = setTimeout(loadStatus, 0);
     return () => clearTimeout(timer);
   }, [loadStatus]);
   useEffect(() => {
-    if (!status?.qrAvailable) return;
+    if (!qrShouldLoad) return;
     const timer = setTimeout(loadQr, 0);
     return () => clearTimeout(timer);
-  }, [status?.qrAvailable, status?.generation, loadQr]);
+  }, [qrShouldLoad, status?.generation, loadQr]);
   useEffect(() => {
-    if (!status) return;
+    if (!currentState) return;
     const interval = setInterval(
       () => void loadStatus(true),
-      whatsappPollingMs(status.status),
+      whatsappPollingMs(currentState),
     );
     return () => clearInterval(interval);
-  }, [status, loadStatus]);
-  useEffect(() => {
-    if (!status?.qrAvailable) return;
-    const interval = setInterval(() => void loadQr(), 15000);
-    return () => clearInterval(interval);
-  }, [status?.qrAvailable, status?.generation, loadQr]);
-  useEffect(() => {
-    if (
-      status?.status !== "AUTHENTICATING" ||
-      status.lifecycleState === "READY"
-    )
-      return;
-    const timer = setTimeout(
-      () => setAuthenticatingTooLong(true),
-      WHATSAPP_AUTHENTICATING_WARNING_MS,
-    );
-    return () => clearTimeout(timer);
-  }, [status?.status, status?.generation, status?.lifecycleState]);
-  async function action(endpoint: string, success: string) {
-    if (busy) return;
+  }, [currentState, loadStatus]);
+  async function action(endpoint: WhatsAppAction, success: string) {
+    if (busy || actionInFlight.current) return;
+    actionInFlight.current = true;
+    let actionFailure = "";
     setBusy(endpoint);
     setConnectionError("");
     setQrError("");
     try {
-      await api.post(`/whatsapp/${endpoint}`);
+      await api.post(WHATSAPP_ACTION_ENDPOINTS[endpoint]);
       setNotice(success);
       setTimeout(() => setNotice(""), 2500);
-      await loadStatus(true);
     } catch (caught) {
-      setConnectionError(
-        caught instanceof ApiError ? caught.message : "Операция не выполнена",
-      );
+      actionFailure = caught instanceof ApiError ? caught.message : "Операция не выполнена";
     } finally {
+      if (statusRequestInFlight.current) await statusRequestInFlight.current;
+      await loadStatus(true);
+      if (actionFailure) setConnectionError(actionFailure);
+      actionInFlight.current = false;
       setBusy("");
     }
   }
   async function logout() {
-    await action("logout", "WhatsApp отключён");
+    await action("logout", "Выход из аккаунта WhatsApp запущен");
     setLogoutOpen(false);
     setQr(null);
-  }
-  async function switchNumber() {
-    if (busy) return;
-    setBusy("switch-number");
-    setConnectionError("");
-    setQr(null);
-    try {
-      await api.post("/whatsapp/logout");
-      await loadStatus(true);
-      setStatus((current) => current ? {
-        ...current,
-        status: "INITIALIZING",
-        connected: false,
-        phoneNumber: null,
-        displayName: null,
-        qrAvailable: false,
-      } : current);
-      await api.post("/whatsapp/initialize");
-      await loadStatus(true);
-      setSwitchOpen(false);
-    } catch (caught) {
-      setConnectionError(caught instanceof ApiError ? caught.message : "Не удалось подключить другой номер");
-      await loadStatus(true);
-    } finally {
-      setBusy("");
-    }
-  }
-  async function requestNewQr() {
-    if (busy) return;
-    setBusy("reconnect");
-    setConnectionError("");
-    setQrError("");
-    setQr(null);
-    setStatus((current) =>
-      current
-        ? {
-            ...current,
-            status: "INITIALIZING",
-            connected: false,
-            qrAvailable: false,
-          }
-        : current,
-    );
-    try {
-      await api.post("/whatsapp/reconnect");
-      setNotice("Создание нового QR запущено");
-      setTimeout(() => setNotice(""), 2500);
-    } catch (caught) {
-      setConnectionError(
-        caught instanceof ApiError ? caught.message : "Операция не выполнена",
-      );
-      await loadStatus(true);
-    } finally {
-      setBusy("");
-    }
   }
   if (loading && !status)
     return (
@@ -241,6 +152,7 @@ export function WhatsAppPage() {
   if (!status) return null;
   const connectionView = resolveWhatsAppConnectionView(status);
   const visibleQr = qr && belongsToCurrentGeneration(status, qr) ? qr : null;
+  const actionsDisabled = connectionActionsDisabled(status, busy);
   return (
     <section className="page whatsapp-page">
       <div className="whatsapp-status-card">
@@ -248,8 +160,8 @@ export function WhatsAppPage() {
           <div className="wa-title">
             <Smartphone />
             <h2>WhatsApp</h2>
-            <StatusBadge tone={statusTone(status.status)}>
-              {WHATSAPP_STATUS_LABELS[status.status] || enumLabel(status.status)}
+            <StatusBadge tone={statusTone(status.state)}>
+              {WHATSAPP_STATUS_LABELS[status.state] || enumLabel(status.state)}
             </StatusBadge>
           </div>
           {connectionView === "connected" && <div className="wa-facts">
@@ -264,49 +176,49 @@ export function WhatsAppPage() {
               value={status.qrAvailable ? "Да" : "Нет"}
             />
           </div>}
-          {status.lifecycleState && <p className="muted">Этап подключения: {status.lifecycleState}</p>}
           <div className="wa-actions">
-            {["DISABLED", "DISCONNECTED", "AUTH_FAILURE", "ERROR"].includes(
-              status.status,
-            ) && (
-              <Button loading={busy === "reconnect"} onClick={requestNewQr}>
+            {status.state === "IDLE" && (
+              <Button loading={busy === "initialize"} disabled={actionsDisabled} onClick={() => action("initialize", "Подключение WhatsApp запущено")}>
                 <Link2 size={15} />
-                Получить новый QR
+                Подключить
               </Button>
             )}
-            {status.status === "CONNECTED" && (
+            {status.state === "ERROR" && (
+              <Button loading={busy === "reconnect"} disabled={actionsDisabled} onClick={() => action("reconnect", "Переподключение WhatsApp запущено")}><RotateCcw size={15} />Переподключить</Button>
+            )}
+            {status.state === "CONNECTED" && status.connected && (
               <>
                 <Button
                   variant="secondary"
                   loading={busy === "reconnect"}
-                  onClick={() =>
-                    action("reconnect", "Переподключение запущено")
-                  }
+                  disabled={actionsDisabled}
+                  onClick={() => action("reconnect", "Переподключение WhatsApp запущено")}
                 >
                   <RotateCcw size={15} />
                   Переподключить
                 </Button>
                 <Button
                   variant="secondary"
-                  disabled={!!busy}
-                  onClick={() => setSwitchOpen(true)}
+                  disabled={actionsDisabled}
+                  loading={busy === "destroy"}
+                  onClick={() => action("destroy", "Отключение WhatsApp запущено")}
                 >
-                  <Link2 size={15} />
-                  Подключить другой номер
+                  <Smartphone size={15} />
+                  Отключить
                 </Button>
                 <Button
                   variant="danger"
-                  disabled={!!busy}
+                  disabled={actionsDisabled}
                   onClick={() => setLogoutOpen(true)}
                 >
                   <LogOut size={15} />
-                  Отключить
+                  Выйти из аккаунта
                 </Button>
               </>
             )}
             <Button
               variant="secondary"
-              disabled={!!busy}
+              disabled={actionsDisabled}
               onClick={() => loadStatus()}
             >
               <RefreshCw size={15} />
@@ -314,7 +226,7 @@ export function WhatsAppPage() {
             </Button>
           </div>
         </div>
-        <div className={`wa-state-orb ${status.status.toLowerCase()}`}>
+        <div className={`wa-state-orb ${status.state.toLowerCase()}`}>
           <span />
         </div>
       </div>
@@ -324,40 +236,22 @@ export function WhatsAppPage() {
         <WhatsAppConnectedDashboard />
       ) : connectionView === "qr" ? (
         <WhatsAppQrConnect qr={visibleQr} error={qrError} retry={loadQr} />
-      ) : connectionView === "initializing" ? (
-        <WhatsAppInitializing />
+      ) : connectionView === "starting" ? (
+        <WhatsAppInitializing title="Запускаем WhatsApp..." description="Подготавливаем подключение" />
       ) : connectionView === "authenticating" ? (
-        authenticatingTooLong ? (
-          <WhatsAppStatusWarning refresh={() => loadStatus()} />
-        ) : (
-          <WhatsAppInitializing title="Подтверждаем подключение WhatsApp" description="Проверяем авторизацию устройства" />
-        )
-      ) : connectionView === "state-warning" ? (
-        <WhatsAppStatusWarning refresh={() => loadStatus()} />
-      ) : connectionView === "auth-failure" ? (
-        <WhatsAppDisconnected
-          title="Не удалось авторизоваться"
-          error={status.lastError}
-          busy={busy === "reconnect"}
-          retry={requestNewQr}
-        />
-      ) : connectionView === "disconnected" ? (
-        <WhatsAppDisconnected
-          title="WhatsApp не подключён"
-          busy={busy === "reconnect"}
-          retry={requestNewQr}
-        />
+        <WhatsAppInitializing title="QR подтверждён. Завершаем подключение..." description="Подключение обновится автоматически" />
+      ) : connectionView === "disconnecting" ? (
+        <WhatsAppInitializing title="Отключаем WhatsApp..." description="Дождитесь завершения операции" />
+      ) : connectionView === "logging-out" ? (
+        <WhatsAppInitializing title="Выходим из WhatsApp..." description="Дождитесь завершения операции" />
+      ) : connectionView === "idle" ? (
+        <WhatsAppStateMessage title="WhatsApp не подключён" />
       ) : connectionView === "error" ? (
-        <WhatsAppDisconnected
-          title="Ошибка подключения WhatsApp"
-          error={status.lastError}
-          busy={busy === "reconnect"}
-          retry={requestNewQr}
-        />
+        <WhatsAppStateMessage title="Ошибка подключения WhatsApp" error={status.lastError} />
       ) : connectionView === "disabled" ? (
-        <WhatsAppDisconnected title="WhatsApp отключён" busy={busy === "reconnect"} retry={requestNewQr} />
+        <WhatsAppStateMessage title="WhatsApp отключён в конфигурации" />
       ) : (
-        <WhatsAppDisconnected title="Неизвестный статус WhatsApp" error={String(status.status)} busy={busy === "reconnect"} retry={requestNewQr} />
+        <WhatsAppStateMessage title="Некорректное состояние WhatsApp" error={String(status.state)} />
       )}
       {connectionView === "connected" && status.connected && <div className="whatsapp-grid">
         <WhatsAppMessages tab={tab} onTab={setTab} refreshKey={messagesRefresh} />
@@ -373,12 +267,11 @@ export function WhatsAppPage() {
       </div>}
       <Modal
         open={logoutOpen}
-        title="Отключить WhatsApp?"
+        title="Выйти из аккаунта WhatsApp?"
         onClose={() => !busy && setLogoutOpen(false)}
       >
         <p>
-          Текущая авторизация будет завершена. Для повторного подключения
-          потребуется новый QR-код.
+          Локальная авторизация будет удалена. Следующее подключение потребует новый QR-код.
         </p>
         <div className="form-actions">
           <Button
@@ -389,19 +282,8 @@ export function WhatsAppPage() {
             Отмена
           </Button>
           <Button variant="danger" loading={busy === "logout"} onClick={logout}>
-            Отключить
+            Выйти из аккаунта
           </Button>
-        </div>
-      </Modal>
-      <Modal
-        open={switchOpen}
-        title="Подключить другой номер?"
-        onClose={() => !busy && setSwitchOpen(false)}
-      >
-        <p>Текущий WhatsApp будет отключён. Для другого номера потребуется новый QR-код.</p>
-        <div className="form-actions">
-          <Button variant="secondary" disabled={!!busy} onClick={() => setSwitchOpen(false)}>Отмена</Button>
-          <Button loading={busy === "switch-number"} onClick={switchNumber}>Продолжить</Button>
         </div>
       </Modal>
     </section>
@@ -413,9 +295,6 @@ function WhatsAppConnectedDashboard() {
 }
 function WhatsAppInitializing({title="Подготавливаем WhatsApp...",description="QR-код появится автоматически"}:{title?:string;description?:string}) {
   return <div className="qr-panel"><div className="qr-skeleton" /><h3>{title}</h3><p>{description}</p></div>;
-}
-function WhatsAppStatusWarning({ refresh }: { refresh: () => void }) {
-  return <div className="qr-panel"><h3>Подключение занимает больше времени, чем обычно</h3><p>Обновите статус. Переподключение автоматически не запускается.</p><Button variant="secondary" onClick={refresh}><RefreshCw size={15} /> Обновить статус</Button></div>;
 }
 function WhatsAppQrConnect({
   qr,
@@ -446,7 +325,7 @@ function WhatsAppQrConnect({
         </p>
       )}
       {qr?.expiresAt && <p className="muted">Действителен до {dateTime(qr.expiresAt)}</p>}
-      <h3>Подключите устройство</h3>
+      <h3>Отсканируйте QR-код в WhatsApp</h3>
       <div className="qr-steps">
         <span>
           <b>1</b>Откройте WhatsApp
@@ -467,24 +346,11 @@ function WhatsAppQrConnect({
     </div>
   );
 }
-function WhatsAppDisconnected({
-  title,
-  busy,
-  retry,
-  error,
-}: {
-  title: string;
-  busy: boolean;
-  retry: () => void;
-  error?: string | null;
-}) {
+function WhatsAppStateMessage({title,error}:{title:string;error?:string|null}) {
   return (
     <div className="qr-panel">
       <h3>{title}</h3>
       {error && <p className="form-error">{error}</p>}
-      <Button loading={busy} onClick={retry}>
-        <RotateCcw size={15} /> Получить новый QR
-      </Button>
     </div>
   );
 }
@@ -723,9 +589,9 @@ function Fact({ label, value }: { label: string; value: unknown }) {
 function statusTone(status: string) {
   return status === "CONNECTED"
     ? "success"
-    : status === "ERROR" || status === "AUTH_FAILURE"
+    : status === "ERROR"
       ? "danger"
-      : status === "INITIALIZING" || status === "AUTHENTICATING"
+      : ["STARTING", "AUTHENTICATING", "DISCONNECTING", "LOGGING_OUT"].includes(status)
         ? "info"
         : "warning";
 }

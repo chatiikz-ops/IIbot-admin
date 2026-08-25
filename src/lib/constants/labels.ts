@@ -96,13 +96,14 @@ export const CAMPAIGN_SOURCE_LABELS: Record<string, string> = {
 };
 
 export const WHATSAPP_STATUS_LABELS: Record<string, string> = {
-  DISABLED: "Отключён",
-  INITIALIZING: "Подготовка WhatsApp",
+  DISABLED: "WhatsApp отключён в конфигурации",
+  IDLE: "WhatsApp не подключён",
+  STARTING: "Запускаем WhatsApp...",
   QR_REQUIRED: "Требуется QR-код",
-  AUTHENTICATING: "Авторизация WhatsApp",
-  CONNECTED: "Подключён",
-  DISCONNECTED: "Соединение потеряно",
-  AUTH_FAILURE: "Ошибка авторизации",
+  AUTHENTICATING: "Завершаем подключение",
+  CONNECTED: "Подключено",
+  DISCONNECTING: "Отключаем WhatsApp...",
+  LOGGING_OUT: "Выходим из WhatsApp...",
   ERROR: "Ошибка подключения",
 };
 

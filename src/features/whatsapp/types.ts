@@ -3,16 +3,15 @@ import type { WhatsAppConnectionStatus, WhatsAppMessageStatus } from "@/src/lib/
 export type WhatsAppState = WhatsAppConnectionStatus;
 export type WhatsAppStatus = {
   enabled: boolean;
-  status: WhatsAppState;
+  state: WhatsAppState;
   connected: boolean;
   phoneNumber: string | null;
   displayName: string | null;
   lastConnectedAt: string | null;
   lastDisconnectedAt: string | null;
   qrAvailable: boolean;
-  lastError?: string | null;
-  generation?: number;
-  lifecycleState?: string;
+  lastError: string | null;
+  generation: number;
 };
 export type WhatsAppQr = {
   available: boolean;
@@ -20,7 +19,6 @@ export type WhatsAppQr = {
   createdAt?: string;
   expiresAt?: string;
   generation?: number;
-  lifecycleState?: string;
   reason?: string;
 };
 export type WhatsAppMessage = Record<string, unknown> & {
