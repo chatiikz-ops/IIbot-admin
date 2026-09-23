@@ -11,3 +11,5 @@ test("import source sends sourceImportJobId without exposing it as input",()=>as
 test("preflight controls start and blockers have actionable routes",()=>{assert.equal(canStartCampaign({ready:true}),true);assert.equal(canStartCampaign({ready:false}),false);assert.equal(issueHref("WHATSAPP_DISCONNECTED"),"/whatsapp");assert.equal(issueHref("STRATEGY_MISSING"),"/prompt-strategies")});
 test("running and paused campaigns use bounded polling",()=>{assert.equal(campaignPollingMs("RUNNING"),5000);assert.equal(campaignPollingMs("PAUSED"),15000);assert.equal(campaignPollingMs("COMPLETED"),null)});
 test("target and strategy codes have human labels",()=>{assert.ok(CAMPAIGN_TARGET_STATUS_LABELS.MESSAGE_SENT);assert.ok(CAMPAIGN_TARGET_STATUS_LABELS.SKIPPED);assert.ok(STRATEGY_LABELS.BARBERSHOP_GENERAL)});
+
+test("ignored source columns use the backend-compatible mapping value",()=>{const mapping={Наименование:"companyName",Описание:"ignore","WhatsApp 1":"whatsapp"};assert.equal(canConfirmMapping(mapping),true);assert.equal(mapping.Описание,"ignore")});
