@@ -1,7 +1,7 @@
 export type ImportMapping = Record<string, string>;
 
 export const IMPORT_FIELDS = [
-  ["", "Не использовать"], ["companyName", "Компания"], ["phone", "Телефон"], ["whatsapp", "WhatsApp"],
+  ["ignore", "Не использовать"], ["companyName", "Компания"], ["phone", "Телефон"], ["whatsapp", "WhatsApp"],
   ["city", "Город"], ["category", "Категория"], ["website", "Сайт"],
   ["instagram", "Instagram"], ["twoGisUrl", "2GIS"], ["bookingUrl", "Ссылка записи"],
   ["email", "Email"], ["address", "Адрес"], ["notes", "Заметки"],
