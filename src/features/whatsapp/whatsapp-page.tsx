@@ -41,6 +41,7 @@ import {
   WHATSAPP_ACTION_ENDPOINTS,
   type WhatsAppAction,
   whatsappPollingMs,
+  whatsappQrPollingMs,
 } from "./whatsapp-state";
 
 type Tab = "messages" | "unmatched";
@@ -99,7 +100,11 @@ export function WhatsAppPage() {
   useEffect(() => {
     if (!qrShouldLoad) return;
     const timer = setTimeout(loadQr, 0);
-    return () => clearTimeout(timer);
+    const interval = setInterval(() => void loadQr(), whatsappQrPollingMs);
+    return () => {
+      clearTimeout(timer);
+      clearInterval(interval);
+    };
   }, [qrShouldLoad, status?.generation, loadQr]);
   useEffect(() => {
     if (!currentState) return;
