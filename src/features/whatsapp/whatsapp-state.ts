@@ -31,6 +31,8 @@ export function whatsappPollingMs(state: WhatsAppStatus["state"]) {
   return ["STARTING", "QR_REQUIRED", "AUTHENTICATING", "DISCONNECTING", "LOGGING_OUT"].includes(state) ? 1_500 : 12_000;
 }
 
+export const whatsappQrPollingMs = 3_000;
+
 export function shouldRequestQr(status: WhatsAppStatus) {
   return status.state === "QR_REQUIRED" && status.qrAvailable;
 }
